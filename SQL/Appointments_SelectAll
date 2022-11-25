@@ -1,0 +1,156 @@
+
+-- =============================================
+-- Author: Alejandro Caloca
+-- Create date: September 4, 2022
+-- Description: Returns a paginated response of all appointments with info.
+-- Code Reviewer: Gideon Macapagal
+
+-- MODIFIED BY: 
+-- MODIFIED DATE: 
+-- Code Reviewer: 
+-- Note: 
+-- =============================================
+
+ALTER PROC [dbo].[Appointments_SelectAllV2]
+			@PageSize int
+			,@PageIndex int
+AS
+
+/*
+--------- TEST CODE ----------
+DECLARE @PageSize int = 10
+		,@PageIndex int = 2
+
+
+EXECUTE dbo.Appointments_SelectAllV2
+		@PageSize
+		,@PageIndex
+
+
+*/
+
+
+BEGIN
+
+	DECLARE @Offset int = @PageIndex * @PageSize;
+
+	SELECT 
+			a.[Id]
+			,a.[Notes]
+			,a.[IsConfirmed]
+			,a.[AppointmentStart]
+			,a.[AppointmentEnd]
+			,a.[DateCreated]
+			,a.[DateModified]
+			,StatusType = (SELECT
+								st.[Id]
+								,st.[Name]
+							FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+
+			,AppointmentType = (SELECT 
+										apt.[Id]
+										,apt.[Name]
+								FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+
+			,ModifiedBy = (SELECT 
+								u.[Id]
+								,u.[FirstName]
+								,u.[LastName]
+								,u.[Email]
+							FROM dbo.Users as u
+							WHERE a.ModifiedBy = u.Id
+							FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+
+			,Location = (SELECT 
+								l.[Id]
+								,l.[LineOne]
+								,l.[LineTwo]
+								,l.[City]
+								,l.[Zip]
+								,l.[Longitude]
+								,l.[Latitude]
+								,LocationType = JSON_QUERY((SELECT 
+																	lt.[Id]
+																	,lt.[Name]
+															FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+
+								,State = JSON_QUERY((SELECT 
+															s.[Id]
+															,s.[Name]
+															,s.[Code]
+													FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+
+						FROM dbo.Locations as l
+						INNER JOIN dbo.States as s
+						ON l.StateId = s.Id
+						INNER JOIN dbo.LocationTypes as lt
+						ON l.LocationTypeId = lt.Id
+						WHERE l.Id = a.LocationId
+						FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+
+			,Client = (SELECT 
+								u.[Id]
+								,u.[FirstName]
+								,u.[LastName]
+								,u.[Email]
+						FROM dbo.Users AS u
+						WHERE u.Id = a.ClientId
+						FOR JSON AUTO, WITHOUT_ARRAY_WRAPPER)
+
+			,Patient = (SELECT
+						hp.[Id]
+						,hp.[Name]
+						,hp.[PrimaryImageUrl]
+						,HorseMedications = JSON_QUERY((SELECT 
+																m.[Id]
+																,m.[Name]
+														FROM dbo.Medications AS m
+														INNER JOIN dbo.HorseMedications AS hm
+														ON hm.MedicationId = m.Id
+														WHERE hm.HorseProfileId = hp.Id
+														FOR JSON PATH))
+						FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+
+			,CreatedBy = (SELECT 
+								u.[Id]
+								,u.[FirstName]
+								,u.[LastName]
+							FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+
+
+			,Vet = (SELECT 
+							vp.[Id]
+							,vp.[Bio]
+							,vp.[BusinessEmail]
+							,vp.[EmergencyLine]
+							,CreatedBy = JSON_QUERY((SELECT 
+															[FirstName]
+															,[LastName]
+															,[Id]
+															,[AvatarUrl] as UserImage
+													FROM dbo.Users
+													WHERE Id = vp.CreatedBy
+										FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+					FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+
+			,TotalCount = COUNT(1) OVER()
+
+	FROM dbo.Appointments AS a
+	INNER JOIN dbo.StatusTypes AS st
+	ON a.StatusTypeId = st.Id
+	INNER JOIN dbo.AppointmentTypes AS apt
+	ON a.AppointmentTypeId = apt.Id
+	INNER JOIN dbo.VetProfiles AS vp
+	ON a.VetProfileId = vp.Id
+	INNER JOIN dbo.Users AS u
+	ON a.CreatedBy = u.Id
+	LEFT OUTER JOIN dbo.HorseProfiles AS hp
+	ON a.PatientId = hp.Id
+
+	WHERE a.StatusTypeId = 1
+	ORDER BY a.AppointmentStart
+
+	OFFSET @Offset ROWS
+	FETCH NEXT @PageSize ROWS ONLY
+
+END

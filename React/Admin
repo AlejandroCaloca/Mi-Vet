@@ -1,0 +1,279 @@
+// import node module libraries
+import React, { Fragment, useEffect, useState } from "react";
+import { Col, Row } from "react-bootstrap";
+import { Link } from "react-router-dom";
+import vetProfilesService from "components/vetprofile/vetProfilesService.js";
+import netUserService from "../../../services/userService";
+import * as appointmentService from "../../../services/appointmentService";
+import VetActivity from "./VetActivity";
+import AppointmentActivity from "./AppointmentActivity";
+import BlogActivity from "./BlogActivity";
+import AdminDataDisplay from "./charts/AdminDataDisplay";
+import useComponentVisible from "../analytics/InvisibleComponent";
+import toastr from "toastr";
+import { Form, Formik, Field } from "formik";
+import DatePicker from "../analytics/DatePicker";
+import "../analytics/analytics.css";
+import * as horseProfileService from "../../../services/horseProfilesService";
+import RevenueChart from "./charts/RevenueChart";
+import { EarningsChartSeries, EarningsChartOptions } from "./charts/ChartData";
+// import useRevenueData from "./RevenueData";
+
+import debug from "sabio-debug";
+const _logger = debug.extend("admin");
+
+toastr.options = {
+  toastClass: "analytics-toast-class",
+  closeButton: false,
+  debug: false,
+  newestOnTop: true,
+  progressBar: false,
+  positionClass: "toast-top-right",
+  preventDuplicates: true,
+  onclick: null,
+  showEasing: "swing",
+  hideEasing: "linear",
+  showMethod: "fadeIn",
+  hideMethod: "fadeOut",
+};
+
+const Admin = () => {
+  const [pageData, setPageData] = useState({
+    totalUsers: 0,
+    totalAppointments: 0,
+    totalVetProfiles: 0,
+    totalPatients: 0,
+    vetProfiles: [],
+    userProfiles: [],
+    appointments: [],
+    patientProfiles: [],
+  });
+
+  const [queryDates, setQueryDates] = useState({
+    endDate: new Date(new Date().toLocaleDateString()).toJSON().slice(0, 10),
+    startDate: new Date(
+      new Date(
+        new Date().getFullYear(),
+        new Date().getMonth(),
+        new Date().getDate() - 30
+      ).toLocaleDateString()
+    )
+      .toJSON()
+      .slice(0, 10),
+  });
+
+  // const [revenueData, setRevenueData] = useState({
+  //   revenue: [],
+  // });
+
+  // const revenueDataSet = useRevenueData(
+  //   queryDates.startDate,
+  //   queryDates.endDate,
+  //   revenueData.revenue
+  // )
+
+  useEffect(() => {
+
+    netUserService
+      .getAllUsersV2()
+      .then(onGetUsersSuccess)
+      .catch(onGetUsersError);
+
+    appointmentService
+      .getAllAppointmentsV2()
+      .then(onGetAppointmentsSuccess)
+      .catch(onGetAppointmentsError);
+
+    vetProfilesService
+      .getAllV2()
+      .then(onGetProfilesSucess)
+      .catch(onGetProfilesError);
+
+    horseProfileService
+      .getAllHorsesV2()
+      .then(onGetHorsesSuccess)
+      .catch(onGetHorsesError);
+
+    
+  }, []);
+// const onRevenueCallSuccess = (data) =>{
+//   setRevenueData((prevState)=>{
+//     return {
+//       ...prevState,
+//     revenue = revenueResponse;
+//     };
+//   })
+// };
+
+  const onGetProfilesSucess = (data) => {
+    setPageData((prevState) => {
+      return {
+        ...prevState,
+        totalVetProfiles: data.items.length,
+        vetProfiles: data.items,
+      };
+    });
+  };
+  const onGetProfilesError = (error) => {
+    _logger(error);
+    toastr.clear();
+    toastr.error("Failed to load Vets");
+  };
+
+  const onGetAppointmentsSuccess = (data) => {
+    setPageData((prevState) => {
+      return {
+        ...prevState,
+        totalAppointments: data.items.length,
+        appointments: data.items,
+      };
+    });
+  };
+  const onGetAppointmentsError = (error) => {
+    _logger("getAppointmentsError",error);
+    toastr.clear();
+    toastr.error("Failed to load Appointments");
+  };
+
+  const onGetUsersSuccess = (data) => {
+    setPageData((prevState) => {
+      return {
+        ...prevState,
+        totalUsers: data.items.length,
+        userProfiles: data.items,
+      };
+    });
+  };
+
+
+  const onGetUsersError = (error) => {
+    _logger(error);
+    toastr.clear();
+    toastr.error("Failed to load Users");
+  };
+
+  const onGetHorsesSuccess = (data) => {
+    setPageData((prevState) => {
+      return {
+        ...prevState,
+        totalPatients: data.items.length,
+        patientProfiles: data.items,
+      };
+    });
+  };
+  const onGetHorsesError = (error) => {
+    _logger(error);
+    toastr.clear();
+    toastr.error("Failed to load Patients");
+  };
+
+  const { ref, isComponentVisible, setIsComponentVisible } =
+    useComponentVisible(false);
+
+  const onSubmit = (values) => {
+    setIsComponentVisible((prevState) => {
+      return !prevState;
+    });
+    if (isComponentVisible) {
+      setQueryDates((prevState) => {
+        const pd = { ...prevState };
+        pd.startDate = values.startDate.toJSON().slice(0, 10);
+        pd.endDate = values.endDate.toJSON().slice(0, 10);
+
+        return pd;
+      });
+    }
+  };
+
+  return (
+    <Fragment>
+      <Row>
+        <Col lg={12} md={12} sm={12}>
+          <div className="border-bottom pb-4 mb-4 d-md-flex justify-content-between align-items-center">
+            <div className="mb-3 mb-md-0">
+              <h1 className="mb-0 h2 fw-bold">Admin</h1>
+            </div>
+
+            <div>
+              <Link to="/dashboard/analytics" className="btn btn-primary m-1">
+                Google Analytics
+              </Link>
+              <Link to="/dashboard/files" className="btn btn-primary m-1">
+                Files
+              </Link>
+            </div>
+
+            <Formik
+              enableReinitialize={true}
+              initialValues={{
+                startDate: new Date(queryDates.startDate.replaceAll("-", "/")),
+                endDate: new Date(queryDates.endDate.replaceAll("-", "/")),
+                minDate: new Date("Oct 1 2022"),
+                maxDate: new Date(
+                  new Date().toLocaleString().slice(0, 10).replaceAll("-", "/")
+                ),
+              }}
+              onSubmit={onSubmit}
+            >
+              <Form>
+                <div className="d-flex" ref={ref}>
+                  <div className="input-group me-3 ">
+                    <span
+                      className="input-group-text text-muted"
+                      id="basic-addon2"
+                    >
+                      <i className="fe fe-calendar"></i>
+                      {isComponentVisible && (
+                        <Field
+                          component={DatePicker}
+                          className={
+                            isComponentVisible
+                              ? "analytics-date-picker"
+                              : "d-none"
+                          }
+                        />
+                      )}
+                    </span>
+                  </div>
+                  <button type="submit" className="btn btn-primary">
+                    {isComponentVisible ? "Submit" : "Settings"}
+                  </button>
+                </div>
+              </Form>
+            </Formik>
+          </div>
+        </Col>
+      </Row>
+      <Row>
+        <Col>
+          <div>
+            <AdminDataDisplay aData={pageData} qDates={queryDates} />
+          </div>
+        </Col>
+      </Row>
+
+      <Row>
+        <RevenueChart
+          // revenueData={revenueDataSet}
+          options={EarningsChartOptions}
+          series={EarningsChartSeries}
+        />
+      </Row>
+
+      <Row>
+        <Col xl={4} lg={6} md={12} className="mb-4">
+          <VetActivity title="Recent Veterinarians" />
+        </Col>
+        <Col xl={4} lg={6} md={12} className="mb-4">
+          <AppointmentActivity title="Recent Appointments" />
+        </Col>
+
+        <Col xl={4} lg={6} md={12} className="mb-4">
+          <BlogActivity title="Recent Blogs" />
+        </Col>
+      </Row>
+    </Fragment>
+  );
+};
+
+export default Admin;
